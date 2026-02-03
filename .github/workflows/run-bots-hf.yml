@@ -1,4 +1,50 @@
-DISCORD_BOT1_TOKEN=MTQ2ODA5MDM0Njk2ODcxNTQwNQ.Gnc4uK.UnLY-nXS1_ZA7LmyK68qH2tkwsmpBAc9bPbico
-DISCORD_BOT2_TOKEN=MTQ2ODA5MTA4NDQ2NjAzMjY4Mw.G1vL1s.t2OYMy9S_wG8qBSc7fAzs_RIDBJa0sh23AvFDo
-DISCORD_CHANNEL_ID=1468104899760881807
-HUGGINGFACE_TOKEN=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
+name: Discord AI Bots (Hugging Face - 24/7)
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+  schedule:
+    # Auto-restart every 5 hours to stay running 24/7
+    - cron: '0 */5 * * *'
+
+jobs:
+  run-bots:
+    runs-on: ubuntu-latest
+    timeout-minutes: 300  # 5 hours (safe under 6 hour limit)
+    
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+    
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.11'
+        cache: 'pip'
+    
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+    
+    - name: Run Discord Bots (Hugging Face)
+      env:
+        HUGGINGFACE_TOKEN: ${{ secrets.HUGGINGFACE_TOKEN }}
+        DISCORD_BOT1_TOKEN: ${{ secrets.DISCORD_BOT1_TOKEN }}
+        DISCORD_BOT2_TOKEN: ${{ secrets.DISCORD_BOT2_TOKEN }}
+        DISCORD_CHANNEL_ID: ${{ secrets.DISCORD_CHANNEL_ID }}
+      run: |
+        echo "Starting Discord AI bots with Hugging Face..."
+        echo "Bots will run for 5 hours, then auto-restart"
+        
+        # Run for 5 hours (18000 seconds)
+        timeout 18000 python discord_ai_agents_hf.py || echo "Bot session completed"
+        
+        echo "Session finished. Workflow will auto-restart via cron schedule."
+    
+    - name: Trigger next run (backup method)
+      if: success()
+      run: |
+        echo "Bots ran successfully for 5 hours"
+        echo "Next scheduled run will start automatically"
