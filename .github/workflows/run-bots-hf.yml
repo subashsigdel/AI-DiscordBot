@@ -28,18 +28,18 @@ jobs:
         python -m pip install --upgrade pip
         pip install -r requirements.txt
     
-    - name: Run Discord Bots (Hugging Face)
+    - name: Run Discord Bots (Hugging Face - User Response Only)
       env:
         HUGGINGFACE_TOKEN: ${{ secrets.HUGGINGFACE_TOKEN }}
         DISCORD_BOT1_TOKEN: ${{ secrets.DISCORD_BOT1_TOKEN }}
         DISCORD_BOT2_TOKEN: ${{ secrets.DISCORD_BOT2_TOKEN }}
-        DISCORD_CHANNEL_ID: ${{ secrets.DISCORD_CHANNEL_ID }}
       run: |
-        echo "Starting Discord AI bots with Hugging Face..."
-        echo "Bots will run for 5 hours, then auto-restart"
+        echo "Starting Discord AI bots (User Response Mode)..."
+        echo "Bots will respond when users message them in ANY channel"
+        echo "No auto-conversation - only user-triggered responses"
         
         # Run for 5 hours (18000 seconds)
-        timeout 18000 python discord_ai_agents_hf.py || echo "Bot session completed"
+        timeout 18000 python discord_ai_agents_hf_useronly.py || echo "Bot session completed"
         
         echo "Session finished. Workflow will auto-restart via cron schedule."
     
