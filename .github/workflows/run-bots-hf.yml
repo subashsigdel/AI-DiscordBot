@@ -39,7 +39,7 @@ jobs:
         echo "No auto-conversation - only user-triggered responses"
         
         # Run for 5 hours (18000 seconds)
-        timeout 18000 python discord_ai_agents_hf_useronly.py || echo "Bot session completed"
+        timeout 18000 python discord_ai_agents_hf.py || echo "Bot session completed"
         
         echo "Session finished. Workflow will auto-restart via cron schedule."
     
