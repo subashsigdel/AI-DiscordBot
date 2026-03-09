@@ -13,7 +13,7 @@ import logging
 from huggingface_hub import InferenceClient
 
 # Setup logging
-logging.basicConfig(level=logging.INFO)
+logging.basicConfig(level=logging.ERROR)
 logger = logging.getLogger(__name__)
 
 # Bot tokens from environment variables
@@ -189,7 +189,6 @@ async def on_message(message):
     
     # Record user message
     add_to_history(message.channel.id, message.author.display_name, message.content)
-    logger.info(f"User message in #{message.channel.name}: {message.author.display_name}: {message.content}")
     
     # Small delay to seem natural
     await asyncio.sleep(2)
