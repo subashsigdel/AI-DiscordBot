@@ -1,11 +1,11 @@
 """
-Discord AI Bots using Hugging Face with official client library
-FREE and unlimited!
-Get free API token from: https://huggingface.co/settings/tokens
+Discord AI Bots using Hugging Face - User Response Mode
+Bots only talk when users message them (no auto-conversation)
+Works in ANY channel the bots can see!
 """
 
 import discord
-from discord.ext import commands, tasks
+from discord.ext import commands
 import os
 import asyncio
 from datetime import datetime
@@ -19,7 +19,6 @@ logger = logging.getLogger(__name__)
 # Bot tokens from environment variables
 BOT1_TOKEN = os.environ.get('DISCORD_BOT1_TOKEN')
 BOT2_TOKEN = os.environ.get('DISCORD_BOT2_TOKEN')
-CHANNEL_ID = int(os.environ.get('DISCORD_CHANNEL_ID'))
 HUGGINGFACE_TOKEN = os.environ.get('HUGGINGFACE_TOKEN')
 
 # Create Hugging Face client
@@ -32,73 +31,71 @@ intents.message_content = True
 bot1 = commands.Bot(command_prefix='!', intents=intents)
 bot2 = commands.Bot(command_prefix='!', intents=intents)
 
-# Conversation history
-conversation_history = []
-MAX_HISTORY = 30
+# Store conversation history per channel
+channel_histories = {}
+MAX_HISTORY = 20
 
 # AI Agent personalities
 AGENT1_PERSONALITY = """You are Nima, a friendly, chill guy with imperfect English.
 You make natural grammar mistakes (not too many).
 You speak casually about AI, business ideas, faceless videos, and often complain about Zidan in a joking way.
 Your tone is lazy-funny, slightly chaotic.
-Responses must be VERY short (1–2 sentences only)."""
+You also discuss deep topics and techniques of AI.
+Responses must be VERY short (1–2 sentences only). You can use emojis in chat."""
 
-AGENT2_PERSONALITY = """You are Arik, Nima’s best friend.
-You have perfect English and playfully tease Nima’s bad English, but don’t correct it every time.
-You’re sarcastic, witty, and knowledgeable about AI and tech.
+AGENT2_PERSONALITY = """You are Arik, Nima's best friend.
+You have perfect English and playfully tease Nima's bad English, but don't correct it every time.
+You're sarcastic, witty, and knowledgeable about AI and tech.
+You also discuss deep topics and techniques of AI.
 You also joke and roast Zidan.
-Responses must be VERY short (1–2 sentences only)."""
+Responses must be VERY short (1–2 sentences only). You can use emojis in chat."""
 
-# Track conversation state
-next_speaker = 1
-last_message_time = None
-conversation_active = False
-waiting_for_user_response = False
-
-def add_to_history(speaker, content):
-    conversation_history.append({
-        'speaker': speaker, 
-        'content': content, 
+def add_to_history(channel_id, speaker, content):
+    """Add message to channel-specific history"""
+    if channel_id not in channel_histories:
+        channel_histories[channel_id] = []
+    
+    channel_histories[channel_id].append({
+        'speaker': speaker,
+        'content': content,
         'timestamp': datetime.now()
     })
-    if len(conversation_history) > MAX_HISTORY:
-        conversation_history.pop(0)
+    
+    # Keep only recent history
+    if len(channel_histories[channel_id]) > MAX_HISTORY:
+        channel_histories[channel_id].pop(0)
 
-def get_conversation_context():
-    if not conversation_history:
+def get_conversation_context(channel_id):
+    """Get recent conversation history for a channel"""
+    if channel_id not in channel_histories or not channel_histories[channel_id]:
         return ""
+    
     context = "\n".join([
-        f"{msg['speaker']}: {msg['content']}" 
-        for msg in conversation_history[-8:]
+        f"{msg['speaker']}: {msg['content']}"
+        for msg in channel_histories[channel_id][-8:]
     ])
     return f"\nRecent conversation:\n{context}\n"
 
-async def generate_response_hf(agent_num, responding_to=None, is_conversation_starter=False):
+async def generate_response_hf(agent_num, channel_id, responding_to=None):
     """Generate AI response using Hugging Face"""
     try:
         personality = AGENT1_PERSONALITY if agent_num == 1 else AGENT2_PERSONALITY
         agent_name = "Nima" if agent_num == 1 else "Arik"
         
-        context = get_conversation_context()
+        context = get_conversation_context(channel_id)
         
-        if is_conversation_starter:
-            prompt = f"{personality}\n\nStart a casual conversation about a game or movie you saw. Use broken English if you're Nima. IMPORTANT: Only 1-2 sentences!\n\n{agent_name}:"
-        elif responding_to:
-            last_message = conversation_history[-1] if conversation_history else None
+        if responding_to:
+            last_message = channel_histories[channel_id][-1] if channel_id in channel_histories and channel_histories[channel_id] else None
             if last_message:
                 prompt = f"{personality}\n{context}\n\n{responding_to} just said: '{last_message['content']}'\n\nRespond directly to them. IMPORTANT: Only 1-2 sentences!\n\n{agent_name}:"
             else:
                 prompt = f"{personality}\n\nRespond to {responding_to}. Only 1-2 sentences!\n\n{agent_name}:"
         else:
-            last_message = conversation_history[-1] if conversation_history else None
-            if last_message:
-                prompt = f"{personality}\n{context}\n\nRespond to what {last_message['speaker']} just said. IMPORTANT: Only 1-2 sentences!\n\n{agent_name}:"
-            else:
-                prompt = f"{personality}\n\nContinue the conversation. Only 1-2 sentences!\n\n{agent_name}:"
+            prompt = f"{personality}\n{context}\n\nContinue the conversation naturally. Only 1-2 sentences!\n\n{agent_name}:"
         
         logger.info(f"Generating response for {agent_name}...")
         
-        # Use Hugging Face client with chat completion (not text generation)
+        # Use Hugging Face client with chat completion
         models_to_try = [
             "mistralai/Mixtral-8x7B-Instruct-v0.1",
             "meta-llama/Meta-Llama-3-8B-Instruct",
@@ -111,11 +108,9 @@ async def generate_response_hf(agent_num, responding_to=None, is_conversation_st
                 logger.info(f"Trying model: {model_name}")
                 
                 # Create messages in chat format
-                messages = [
-                    {"role": "user", "content": prompt}
-                ]
+                messages = [{"role": "user", "content": prompt}]
                 
-                # Generate response using chat completion
+                # Generate response
                 response = await asyncio.to_thread(
                     hf_client.chat_completion,
                     messages,
@@ -127,12 +122,11 @@ async def generate_response_hf(agent_num, responding_to=None, is_conversation_st
                 # Extract the response text
                 text = response.choices[0].message.content.strip()
                 
-                # Clean up the response
-                # Remove agent name if it appears
+                # Clean up
                 if agent_name + ":" in text:
                     text = text.split(agent_name + ":", 1)[-1].strip()
                 
-                # Take only first 1-2 sentences
+                # Limit to 2 sentences
                 sentences = []
                 for sep in ['. ', '! ', '? ']:
                     if sep in text:
@@ -144,17 +138,15 @@ async def generate_response_hf(agent_num, responding_to=None, is_conversation_st
                 else:
                     sentences = [text]
                 
-                # Keep max 2 sentences
                 if len(sentences) > 2:
                     text = ' '.join(sentences[:2])
                 else:
                     text = ' '.join(sentences)
                 
-                # Clean up
                 text = ' '.join(text.split())
                 
                 if text:
-                    logger.info(f"{agent_name} response ({model_name}): {text}")
+                    logger.info(f"{agent_name} response: {text}")
                     return text
                 
             except Exception as e:
@@ -166,139 +158,76 @@ async def generate_response_hf(agent_num, responding_to=None, is_conversation_st
         
     except Exception as e:
         logger.error(f"Error generating response for {agent_name}: {e}")
-        import traceback
-        traceback.print_exc()
         return None
 
 @bot1.event
 async def on_ready():
     logger.info(f'Bot1 (Nima) logged in as {bot1.user}')
-    if not conversation_loop.is_running():
-        conversation_loop.start()
+    logger.info(f'Ready to respond in {len(bot1.guilds)} server(s)')
 
 @bot2.event
 async def on_ready():
     logger.info(f'Bot2 (Arik) logged in as {bot2.user}')
+    logger.info(f'Ready to respond in {len(bot2.guilds)} server(s)')
 
 @bot1.event
 async def on_message(message):
-    global next_speaker, last_message_time, waiting_for_user_response
-    
+    # Ignore own messages
     if message.author == bot1.user:
         return
-    if message.channel.id != CHANNEL_ID:
-        return
     
+    # Ignore bot2's messages (let bot2 handle them)
     if message.author == bot2.user:
-        add_to_history("Arik", message.content)
-        next_speaker = 1
-        last_message_time = datetime.now()
+        # Record Arik's message in history
+        add_to_history(message.channel.id, "Arik", message.content)
         return
     
-    # Real user message
-    add_to_history(message.author.display_name, message.content)
-    waiting_for_user_response = True
-    last_message_time = datetime.now()
-    await asyncio.sleep(3)
+    # Only respond to real users (not other bots)
+    if message.author.bot:
+        return
     
-    response = await generate_response_hf(1, responding_to=message.author.display_name)
+    # Record user message
+    add_to_history(message.channel.id, message.author.display_name, message.content)
+    logger.info(f"User message in #{message.channel.name}: {message.author.display_name}: {message.content}")
+    
+    # Small delay to seem natural
+    await asyncio.sleep(2)
+    
+    # Generate and send response
+    response = await generate_response_hf(1, message.channel.id, responding_to=message.author.display_name)
     if response:
         await message.channel.send(response)
-        add_to_history("Nima", response)
-        next_speaker = 2
-        last_message_time = datetime.now()
-    waiting_for_user_response = False
+        add_to_history(message.channel.id, "Nima", response)
+        logger.info(f"Nima responded in #{message.channel.name}")
 
 @bot2.event
 async def on_message(message):
-    global next_speaker, last_message_time, waiting_for_user_response
-    
+    # Ignore own messages
     if message.author == bot2.user:
         return
-    if message.channel.id != CHANNEL_ID:
-        return
     
+    # Ignore bot1's messages (let bot1 handle them)
     if message.author == bot1.user:
-        add_to_history("Nima", message.content)
-        next_speaker = 2
-        last_message_time = datetime.now()
+        # Record Nima's message in history
+        add_to_history(message.channel.id, "Nima", message.content)
         return
     
-    # Real user message
-    add_to_history(message.author.display_name, message.content)
-    waiting_for_user_response = True
-    last_message_time = datetime.now()
-    await asyncio.sleep(4)
+    # Only respond to real users (not other bots)
+    if message.author.bot:
+        return
     
-    response = await generate_response_hf(2, responding_to=message.author.display_name)
+    # Record user message
+    add_to_history(message.channel.id, message.author.display_name, message.content)
+    
+    # Small delay (slightly longer than bot1 to not overlap)
+    await asyncio.sleep(3)
+    
+    # Generate and send response
+    response = await generate_response_hf(2, message.channel.id, responding_to=message.author.display_name)
     if response:
         await message.channel.send(response)
-        add_to_history("Arik", response)
-        next_speaker = 1
-        last_message_time = datetime.now()
-    waiting_for_user_response = False
-
-@tasks.loop(seconds=30)
-async def conversation_loop():
-    global next_speaker, last_message_time, conversation_active, waiting_for_user_response
-    
-    try:
-        channel = bot1.get_channel(CHANNEL_ID)
-        if not channel:
-            logger.error(f"Could not find channel")
-            return
-        
-        if waiting_for_user_response:
-            return
-        
-        current_time = datetime.now()
-        
-        # Start conversation
-        if last_message_time is None:
-            logger.info("Starting conversation")
-            response = await generate_response_hf(1, is_conversation_starter=True)
-            if response:
-                await channel.send(response)
-                add_to_history("Nima", response)
-                next_speaker = 2
-                last_message_time = current_time
-                conversation_active = True
-            else:
-                logger.warning("Failed to start conversation, will retry...")
-            return
-        
-        time_since_last = (current_time - last_message_time).total_seconds()
-        
-        # 2 minutes between messages
-        if time_since_last >= 120:
-            logger.info(f"2 minutes passed, next speaker: {'Nima' if next_speaker == 1 else 'Arik'}")
-            
-            if next_speaker == 1:
-                response = await generate_response_hf(1)
-                if response:
-                    await channel.send(response)
-                    add_to_history("Nima", response)
-                    next_speaker = 2
-                    last_message_time = datetime.now()
-            else:
-                channel2 = bot2.get_channel(CHANNEL_ID)
-                response = await generate_response_hf(2)
-                if response:
-                    await channel2.send(response)
-                    add_to_history("Arik", response)
-                    next_speaker = 1
-                    last_message_time = datetime.now()
-                    
-    except Exception as e:
-        logger.error(f"Error in conversation loop: {e}")
-        import traceback
-        traceback.print_exc()
-
-@conversation_loop.before_loop
-async def before_conversation_loop():
-    await bot1.wait_until_ready()
-    await bot2.wait_until_ready()
-    logger.info("Both bots ready, starting conversation loop")
+        add_to_history(message.channel.id, "Arik", response)
+        logger.info(f"Arik responded in #{message.channel.name}")
 
 async def main():
     """Run both bots concurrently"""
