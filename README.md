@@ -1,0 +1,1 @@
+[![Discord AI Bots (Hugging Face - 24/7)](https://github.com/subashsigdel/AI-DiscordBot/actions/workflows/run-bots-hf.yml/badge.svg)](https://github.com/subashsigdel/AI-DiscordBot/actions/workflows/run-bots-hf.yml)
