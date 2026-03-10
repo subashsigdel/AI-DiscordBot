@@ -4,14 +4,12 @@ on:
   push:
     branches: [ main ]
   workflow_dispatch:
-  workflow_run:
-    workflows: ["Discord AI Bots (Hugging Face - 24/7)"]
-    types: [completed]  # Restart immediately when previous run finishes
 
 jobs:
   run-bots:
     runs-on: ubuntu-latest
     timeout-minutes: 300
+
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -23,7 +21,9 @@ jobs:
           cache: 'pip'
 
       - name: Install dependencies
-        run: pip install -r requirements.txt
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
 
       - name: Run Discord Bots
         env:
