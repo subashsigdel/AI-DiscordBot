@@ -1,0 +1,21 @@
+name: Restart Bots
+
+on:
+  workflow_run:
+    workflows: ["Discord AI Bots (Hugging Face - 24/7)"]
+    types: [completed]
+
+jobs:
+  restart:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger main bot workflow
+        uses: actions/github-script@v7
+        with:
+          script: |
+            await github.rest.actions.createWorkflowDispatch({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              workflow_id: 'run-bots-hf.yml',
+              ref: 'main'
+            })
